@@ -76,13 +76,6 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 	int word_count = 0;
 	if (pipe_count > 0)
 	{
-/*		char *input = NULL;
-		char *out = NULL;
-		char **list2 = NULL;
-		char buf = 0;
-		char *flag2 = &buf;
-		list2 = get_exec_pipe(flag2, input, out);
-*/
 		int (*fd)[2];
 		fd = malloc((pipe_count + 1) * sizeof(int [2]));
 		for (int i = 0; i <= pipe_count; i++)
@@ -96,10 +89,8 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 				if (i == 0 && (input_name != NULL))
 				{
 					int fd_inp = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
-				//	fd[i][0] = fd_open;
 					dup2(fd_inp, 0);
 					close(fd_inp);
-//					return 1;
 				}
 				if (i < pipe_count)
 					dup2(fd[i][1], 1);
@@ -132,55 +123,14 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			close(fd[j][1]);
 		}
 
-/*		if (fork() == 0)
-		{
-			dup2(fd[0][1], 1);
-			close(fd[0][1]);
-			close(fd[0][0]);
-			execvp(list[0], list);
-			exit(1);
-		}
-		count_word(list, &word_count);
-		if (fork() == 0)
-		{
-			dup2(fd[0][0], 0);
-			dup2(fd[1][1], 1);
-			close(fd[0][0]);
-			close(fd[0][1]);
-			close(fd[1][0]);
-			close(fd[1][1]);
-			execvp(list[word_count], list + word_count);
-			exit(1);
-		}
-		count_word(list, &word_count);
-		if (fork() == 0)
-		{
-			dup2(fd[1][0], 0);
-			close(fd[0][0]);
-			close(fd[0][1]);
-			close(fd[1][0]);
-			close(fd[1][1]);
-			execvp(list[word_count], list + word_count);
-			exit(1);
-		}
-		close(fd[0][0]);
-		close(fd[0][1]);
-		close(fd[1][0]);
-		close(fd[1][1]);*/
 		wait(0);
 		wait(0);
 		return 0;
 	}
-//	count_word(list, &word_count, output_name, input_name);
 	if (input_name != NULL)
 	{
-	//	puts(input_name);
-	//	for (int i = 0; list[i]; i++)
-	//		puts(list[i]);
-
 		int fd;
 		fd = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
-//		fd = open(input_name, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
 		if (fd < 0)
 		{
 			perror(input_name);
@@ -193,8 +143,6 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			dup2(fd, 0);
 			close(fd);
 			execvp(list[0], list);
-//			list = list_plus_inp(list);
-//			execvp(list[0], list);
 			exit(1);
 			return 1;
 		}
@@ -228,8 +176,6 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
         		execvp(list[0], list);
 			exit(1);
 			wait(0);
-			//pid_t pid = getppid();
-			//kill(pid, SIGTERM);
 	        }
 	}
 	wait(0);
@@ -283,24 +229,9 @@ char **get_list1(char *last_symbol)
 		}
         	i++;
         }while ((end != '\n'));
-/*    if (new_pipe_num != *old_pipe_num) {
-        free(list[i - 1]);
-        list[i - 1] = NULL;
-        *final_symbol = '\0';
-        *old_pipe_num = new_pipe_num;
-        return list;
-    }*/
 	list = realloc(list, (i + 1) * sizeof(char *));
 	skip:
 	list[i] = NULL;
-/*	for (int i = 0; i < 3; i++)
-	{
-		if (list[i] == NULL)
-			putchar('N');
-		else
-			print_word(list[i]);
-	}*/
-//	print_word(inp_name);
 	exec_command(list, pipe_count, out_name, inp_name);
 	return list;
 }
