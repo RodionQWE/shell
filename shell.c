@@ -11,6 +11,8 @@
 
 int num_bg = 0;
 pid_t bg_pids;
+pid_t *pids = NULL;
+int num_of_processes = 0;
 
 void print_word(char *word)
 {
@@ -79,6 +81,7 @@ int check_exit(char *word)
 int exec_command(char **list, int pipe_count, char *output_name, char *input_name)
 {
 	int word_count = 0;
+	num_of_processes = pipe_count + 1;
 	if (pipe_count > 0)
 	{
 		int fd[pipe_count][2];
@@ -87,7 +90,9 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 		for (int i = 0; i <= pipe_count; i++)
 		{
 			pipe(fd[i]);
-			if (fork() == 0)
+			pids = realloc(pids, (i + 1) * sizeof(pid_t));
+			pids[i] = fork();
+			if (pids[i] == 0)
 			{
 				if (i > 0)
 				{
@@ -249,13 +254,14 @@ int cd_command(char **list) {
 		char *prev_dir = getenv("OLDPWD");
 		if (prev_dir == NULL)
          		perror("cd");
-                else
+		else
 			change_directory(old_path, prev_dir);
-            } else {
-                change_directory(old_path, list[1]);
-            }
-        }
-    return 0;
+	} else
+	{
+		change_directory(old_path, list[1]);
+	}
+	}
+	return 0;
 }
 
 
@@ -357,14 +363,30 @@ void cmd_line_design() {
     char *user = getenv("USER");
     char *working_directory = getenv("PWD");
     printf("%s" ":" "%s" "$ ", user, working_directory);
-    fflush(stdout); // forces a write of all user-space buffered data in stdout
+    fflush(stdout);
 }
 
+
+void handler(int signo) {
+    int i;
+    putchar('\n');
+    cmd_line_design();
+    for (i = 0; i < num_of_processes; i++) {
+        printf("process pid %u\n", pids[i]);
+        if (pids[i]) {
+            printf("kill %u\n", pids[i]);
+            kill(pids[i], SIGINT);
+        }
+        waitpid(pids[i], NULL, 0);
+        pids[i] = 0;
+    }
+}
 
 char **get_list2()
 {
 	char **list = NULL;
 	char last_sym;
+	signal(SIGINT, handler);
 	cmd_line_design();
 	list = get_list1(&last_sym);
 //	if (list == NULL)
@@ -378,6 +400,7 @@ char **get_list2()
 	}
 	return list;
 }
+
 
 
 int main()
