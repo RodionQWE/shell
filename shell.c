@@ -6,6 +6,11 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <signal.h>
+
+int num_bg = 0;
+pid_t bg_pids;
 
 void print_word(char *word)
 {
@@ -76,16 +81,20 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 	int word_count = 0;
 	if (pipe_count > 0)
 	{
-		int (*fd)[2];
-		fd = malloc((pipe_count + 1) * sizeof(int [2]));
-		for (int i = 0; i <= pipe_count; i++)
-			pipe(fd[i]);
+		int fd[pipe_count][2];
+	/*	int (*fd)[2];
+		fd = malloc((pipe_count + 1) * sizeof(int [2]));*/
 		for (int i = 0; i <= pipe_count; i++)
 		{
+			pipe(fd[i]);
 			if (fork() == 0)
 			{
 				if (i > 0)
+				{
 					dup2(fd[i - 1][0], 0);
+					close(fd[i - 1][0]);
+					close(fd[i - 1][1]);
+				}
 				if (i == 0 && (input_name != NULL))
 				{
 					int fd_inp = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
@@ -93,47 +102,61 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 					close(fd_inp);
 				}
 				if (i < pipe_count)
+				{
 					dup2(fd[i][1], 1);
-				if (i == pipe_count)
+					close(fd[i][1]);
+					close(fd[i][0]);
+				}
+				if (i == pipe_count && (output_name != NULL))
 				{
 					int fd_out = open(output_name, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
 					dup2(fd_out, 1);
 					close(fd_out);
 				}
-				if (i > 0)
-				{
-					close(fd[i - 1][0]);
-					close(fd[i - 1][1]);
+				for (int j = 0; j <= i; j++)
+ 				{
+					close(fd[j][0]);
+					close(fd[j][1]);
 				}
-				close(fd[i][1]);
+/*				close(fd[i][1]);
 				close(fd[i][0]);
+				close(fd[i - 1][1]);
+				close(fd[i - 1][0]);
+*/
 				execvp(list[word_count], list + word_count);
+				perror(list[word_count]);
 				exit(1);
-			}
+			} /*else{
+				for (int j = 0; j <= i; j++)
+ 				{
+					close(fd[j][0]);
+					close(fd[j][1]);
+				}
+			}*/
 			count_word(list, &word_count);
-		for (int j = 0; j < i; j++)
- 		{
-			close(fd[j][0]);
-			close(fd[j][1]);
 		}
-		}
+
 		for (int j = 0; j <= pipe_count; j++)
 		{
 			close(fd[j][0]);
 			close(fd[j][1]);
 		}
+//		close(fd[pipe_count - 1][0]);
+//		close(fd[pipe_count - 1][1]);
+		for (int j = 0; j <= pipe_count; j++)
+		{
+			wait(NULL);
+		}
 
-		wait(0);
-		wait(0);
 		return 0;
-	}
+		}
 	if (input_name != NULL)
 	{
 		int fd;
 		fd = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
 		if (fd < 0)
 		{
-			perror(input_name);
+				perror(input_name);
 			return 1;
 		}
 
@@ -182,6 +205,60 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 	return 1;
 }
 
+void run_bg(char **list)
+{
+	char *word;
+	char end;
+//	word = get_word(&end);
+	num_bg++;
+	bg_pids = fork();
+	if (bg_pids == 0)
+	{
+		execvp(list[0], list);
+		perror(list[0]);
+		return;
+	}
+	printf("[ %d ]	%d\n", num_bg, bg_pids);
+	return;
+}
+
+void change_directory(char *old_path, char *new_dir)
+{
+	char *new_path = NULL;
+	if (chdir(new_dir))
+	{
+		perror("cd");
+		return;
+	}
+	new_path = getcwd(new_path, strlen(old_path) + strlen(new_dir) + 2);
+	setenv("OLDPWD", old_path, 1);
+	setenv("PWD", new_path, 1);
+	free(new_path);
+	return;
+}
+
+int cd_command(char **list) {
+	char *home = getenv("HOME");
+	char *old_path = getenv("PWD");
+	if (list[1] == NULL || !strcmp(list[1], "~")) {
+		change_directory(old_path, home);
+	} else
+	{
+	if (!strcmp(list[1], "-"))
+	{
+		char *prev_dir = getenv("OLDPWD");
+		if (prev_dir == NULL)
+         		perror("cd");
+                else
+			change_directory(old_path, prev_dir);
+            } else {
+                change_directory(old_path, list[1]);
+            }
+        }
+    return 0;
+}
+
+
 char **get_list1(char *last_symbol)
 {
 	char *out_name = NULL;
@@ -190,6 +267,8 @@ char **get_list1(char *last_symbol)
 	char pipe_sym[] = "|";
 	char out_sym[] = ">";
 	char inp_sym[] = "<";
+	char bg_sym[] = "&";
+	char cd_word[] = "cd";
 	char end;
 	char end2;
 	int pipe_count = 0;
@@ -201,6 +280,28 @@ char **get_list1(char *last_symbol)
 		list = realloc(list, (i + 1) * sizeof(char *));
 		start_start:
 		list[i] = get_word(&end);
+		if (!strcmp(list[i], cd_word))
+		{
+			list = realloc(list, (i + 2) * sizeof(char *));
+			if (end != '\n')
+			{
+				list[1] = get_word(&end);
+			}
+			else
+				list[1] = NULL;
+			cd_command(list);
+//			bg_flag = 1;
+//			goto skip;
+			return list;
+		}
+		if (!strcmp(list[i], bg_sym))
+		{
+			list[i] = NULL;
+			run_bg(list);
+//			bg_flag = 1;
+//			goto skip;
+			return list;
+		}
 		if (!strcmp(list[i], pipe_sym))
 		{
 			pipe_count++;
@@ -252,15 +353,25 @@ void free_list(char **list)
 	free(list);
 }
 
+void cmd_line_design() {
+    char *user = getenv("USER");
+    char *working_directory = getenv("PWD");
+    printf("%s" ":" "%s" "$ ", user, working_directory);
+    fflush(stdout); // forces a write of all user-space buffered data in stdout
+}
+
+
 char **get_list2()
 {
 	char **list = NULL;
 	char last_sym;
+	cmd_line_design();
 	list = get_list1(&last_sym);
-	if (list == NULL)
-		return list;
+//	if (list == NULL)
+//		return list;
 	while (!check_exit(list[0]))
 	{
+		cmd_line_design();
 
 		list = get_list1(&last_sym);
 
@@ -273,6 +384,7 @@ int main()
 {
 	char **list = NULL;
 	get_list2();
+	waitpid(bg_pids, NULL, 0);
 //	char *word;
 /*	int pipe_count = 0;
 	char last_sym;
