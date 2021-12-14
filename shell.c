@@ -13,6 +13,8 @@ int num_bg = 0;
 pid_t bg_pids;
 pid_t *pids = NULL;
 int num_of_processes = 0;
+//int status = -3;
+
 
 void print_word(char *word)
 {
@@ -191,23 +193,25 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			dup2(fd2, 1);
 			close(fd2);
 			execvp(list[0], list);
-			exit(1);
+		//	exit(1);
 			return 1;
 		}
 		wait(0);
-		return 1;
+		return 0;
 	}
 	if (output_name == NULL)
 	{
-		if (fork() == 0)
+		pids = realloc(pids, 1 * sizeof(pid_t));
+		pids[0] = fork();
+		if (pids[0] == 0)
         	{
-        		execvp(list[0], list);
-			exit(1);
-			wait(0);
+			execvp(list[0], list);
+			return 0;
 	        }
 	}
-	wait(0);
-	return 1;
+	int wstatus = -3;
+	wait(&wstatus);
+	return wstatus;
 }
 
 void run_bg(char **list)
@@ -227,26 +231,26 @@ void run_bg(char **list)
 	return;
 }
 
-void change_directory(char *old_path, char *new_dir)
+int change_directory(char *old_path, char *new_dir)
 {
 	char *new_path = NULL;
 	if (chdir(new_dir))
 	{
 		perror("cd");
-		return;
+		return 1;
 	}
 	new_path = getcwd(new_path, strlen(old_path) + strlen(new_dir) + 2);
 	setenv("OLDPWD", old_path, 1);
 	setenv("PWD", new_path, 1);
 	free(new_path);
-	return;
+	return 0;
 }
 
 int cd_command(char **list) {
 	char *home = getenv("HOME");
 	char *old_path = getenv("PWD");
 	if (list[1] == NULL || !strcmp(list[1], "~")) {
-		change_directory(old_path, home);
+		return change_directory(old_path, home);
 	} else
 	{
 	if (!strcmp(list[1], "-"))
@@ -255,10 +259,10 @@ int cd_command(char **list) {
 		if (prev_dir == NULL)
          		perror("cd");
 		else
-			change_directory(old_path, prev_dir);
+			return change_directory(old_path, prev_dir);
 	} else
 	{
-		change_directory(old_path, list[1]);
+		return change_directory(old_path, list[1]);
 	}
 	}
 	return 0;
@@ -275,10 +279,13 @@ char **get_list1(char *last_symbol)
 	char inp_sym[] = "<";
 	char bg_sym[] = "&";
 	char cd_word[] = "cd";
+	char and_word[] = "&&";
+	int and_count = 0;
+	char *word = NULL;
 	char end;
 	char end2;
 	int pipe_count = 0;
-	char *word;
+//	char *word;
 	int i = 0; //,new_pipe_num = *old_pipe_num;
 	do
 	{
@@ -286,19 +293,32 @@ char **get_list1(char *last_symbol)
 		list = realloc(list, (i + 1) * sizeof(char *));
 		start_start:
 		list[i] = get_word(&end);
+		if (!strcmp(list[i], and_word))
+		{
+			and_count = 1;
+			list[i] = NULL;
+			goto skip;
+		}
 		if (!strcmp(list[i], cd_word))
 		{
 			list = realloc(list, (i + 2) * sizeof(char *));
 			if (end != '\n')
 			{
-				list[1] = get_word(&end);
+				list[i + 1] = get_word(&end);
+				list = realloc(list, (i + 3) * sizeof(char *));
+				list[i + 2] = NULL;
 			}
 			else
-				list[1] = NULL;
-			cd_command(list);
-//			bg_flag = 1;
-//			goto skip;
-			return list;
+				list[i + 1] = NULL;
+			if (!cd_command(list) && end != '\n')
+			{
+				if (!strcmp(get_word(&end), and_word))
+				{
+					i = 0;
+					goto start;
+				}
+			}
+			goto trash;
 		}
 		if (!strcmp(list[i], bg_sym))
 		{
@@ -339,6 +359,19 @@ char **get_list1(char *last_symbol)
 	list = realloc(list, (i + 1) * sizeof(char *));
 	skip:
 	list[i] = NULL;
+	if (and_count == 1)
+	{
+		if ((exec_command(list, pipe_count, out_name, inp_name) == 0) && end != '\n')
+		{
+			i = 0;
+			and_count = 0;
+			goto start;
+		}
+		trash:
+		while (end != '\n')
+			get_word(&end);
+		return list;
+	}
 	exec_command(list, pipe_count, out_name, inp_name);
 	return list;
 }
@@ -359,27 +392,31 @@ void free_list(char **list)
 	free(list);
 }
 
-void cmd_line_design() {
-    char *user = getenv("USER");
-    char *working_directory = getenv("PWD");
-    printf("%s" ":" "%s" "$ ", user, working_directory);
-    fflush(stdout);
+void cmd_line_design()
+{
+	char *user = getenv("USER");
+	char *working_directory = getenv("PWD");
+	printf("%s" ":" "%s" "$ ", user, working_directory);
+//	fflush(stdout);
 }
 
 
-void handler(int signo) {
-    int i;
-    putchar('\n');
-    cmd_line_design();
-    for (i = 0; i < num_of_processes; i++) {
-        printf("process pid %u\n", pids[i]);
-        if (pids[i]) {
-            printf("kill %u\n", pids[i]);
-            kill(pids[i], SIGINT);
-        }
-        waitpid(pids[i], NULL, 0);
-        pids[i] = 0;
-    }
+void handler(int signo)
+{
+	int i;
+	putchar('\n');
+	cmd_line_design();
+	for (i = 0; i < num_of_processes; i++)
+	{
+//		printf("process pid %u\n", pids[i]);
+		if (pids[i])
+		{
+//			printf("kill %u\n", pids[i]);
+			kill(pids[i], SIGINT);
+        	}
+		waitpid(pids[i], NULL, 0);
+		pids[i] = 0;
+	}
 }
 
 char **get_list2()
@@ -396,6 +433,7 @@ char **get_list2()
 		cmd_line_design();
 
 		list = get_list1(&last_sym);
+
 
 	}
 	return list;
