@@ -422,7 +422,8 @@ void handler(int signo)
 	}
 }
 
-char **get_list2()
+
+int main()
 {
 	char **list = NULL;
 	char last_sym;
@@ -439,15 +440,6 @@ char **get_list2()
 
 
 	}
-	return list;
-}
-
-
-
-int main()
-{
-	char **list = NULL;
-	get_list2();
 	waitpid(bg_pids, NULL, 0);
 //	char *word;
 /*	int pipe_count = 0;
