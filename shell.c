@@ -156,7 +156,8 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 		}
 
 		return 0;
-		}
+	}
+	int wstatus = -3;
 	if (input_name != NULL)
 	{
 		int fd;
@@ -176,8 +177,8 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			exit(1);
 			return 1;
 		}
-		wait(0);
-		return 1;
+		wait(&wstatus);
+		return wstatus;
 	}
 	if (output_name != NULL)
 	{
@@ -196,8 +197,8 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 		//	exit(1);
 			return 1;
 		}
-		wait(0);
-		return 0;
+		wait(&wstatus);
+		return wstatus;
 	}
 	if (output_name == NULL)
 	{
@@ -209,7 +210,6 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			return 0;
 	        }
 	}
-	int wstatus = -3;
 	wait(&wstatus);
 	return wstatus;
 }
@@ -363,6 +363,9 @@ char **get_list1(char *last_symbol)
 	{
 		if ((exec_command(list, pipe_count, out_name, inp_name) == 0) && end != '\n')
 		{
+			out_name = NULL;
+			inp_name = NULL;
+			pipe_count = 0;
 			i = 0;
 			and_count = 0;
 			goto start;
