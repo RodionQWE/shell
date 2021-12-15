@@ -45,6 +45,26 @@ char *get_word(char *last_sym) {
 	return word;
 }
 
+void free_list(char **list, int pipe_count)
+{
+	int i = 0;
+	if (list != NULL)
+	{
+		for (int j = 0; j <= pipe_count; j++)
+		{
+			while (list[i] != NULL)
+			{
+				free(list[i]);
+				i++;
+			}
+			free(list[i]);
+			i++;
+		}
+	}
+	free(list);
+}
+
+
 void count_word(char **list, int *word_count)
 {
 	int i = 0;
@@ -168,7 +188,9 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			return 1;
 		}
 
-		if (fork() == 0)
+		pids = realloc(pids, 1 * sizeof(pid_t));
+		pids[0] = fork();
+		if (pids[0] == 0)
 		{
 			printf (" fd  %d\n", fd);
 			dup2(fd, 0);
@@ -189,7 +211,9 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			perror(output_name);
 			return 1;
 		}
-		if (fork() == 0)
+		pids = realloc(pids, 1 * sizeof(pid_t));
+		pids[0] = fork();
+		if (pids[0] == 0)
 		{
 			dup2(fd2, 1);
 			close(fd2);
@@ -216,8 +240,8 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 
 void run_bg(char **list)
 {
-	char *word;
-	char end;
+//	char *word;
+//	char end;
 //	word = get_word(&end);
 	num_bg++;
 	bg_pids = fork();
@@ -269,7 +293,7 @@ int cd_command(char **list) {
 }
 
 
-char **get_list1(char *last_symbol)
+char **get_list1(char *last_symbol, int *pipe_count)
 {
 	char *out_name = NULL;
 	char *inp_name = NULL;
@@ -281,10 +305,9 @@ char **get_list1(char *last_symbol)
 	char cd_word[] = "cd";
 	char and_word[] = "&&";
 	int and_count = 0;
-	char *word = NULL;
+//	char *word = NULL;
 	char end;
-	char end2;
-	int pipe_count = 0;
+//	char end2;
 //	char *word;
 	int i = 0; //,new_pipe_num = *old_pipe_num;
 	do
@@ -330,7 +353,7 @@ char **get_list1(char *last_symbol)
 		}
 		if (!strcmp(list[i], pipe_sym))
 		{
-			pipe_count++;
+			(*pipe_count)++;
 			list[i] = NULL;
 			i++;
 			goto start;
@@ -361,11 +384,11 @@ char **get_list1(char *last_symbol)
 	list[i] = NULL;
 	if (and_count == 1)
 	{
-		if ((exec_command(list, pipe_count, out_name, inp_name) == 0) && end != '\n')
+		if ((exec_command(list, *pipe_count, out_name, inp_name) == 0) && end != '\n')
 		{
 			out_name = NULL;
 			inp_name = NULL;
-			pipe_count = 0;
+			*pipe_count = 0;
 			i = 0;
 			and_count = 0;
 			goto start;
@@ -375,24 +398,8 @@ char **get_list1(char *last_symbol)
 			get_word(&end);
 		return list;
 	}
-	exec_command(list, pipe_count, out_name, inp_name);
+	exec_command(list, *pipe_count, out_name, inp_name);
 	return list;
-}
-
-
-void free_list(char **list)
-{
-	int i = 0;
-	if (list != NULL)
-	{
-		while (list[i] != NULL)
-		{
-			free(list[i]);
-			i++;
-		}
-	//	free(list[i]);
-	}
-	free(list);
 }
 
 void cmd_line_design()
@@ -427,20 +434,24 @@ int main()
 {
 	char **list = NULL;
 	char last_sym;
+	int pipe_count = 0;
 	signal(SIGINT, handler);
 	cmd_line_design();
-	list = get_list1(&last_sym);
+	list = get_list1(&last_sym, &pipe_count);
 //	if (list == NULL)
 //		return list;
 	while (!check_exit(list[0]))
 	{
+		free_list(list, pipe_count);
+		pipe_count = 0;
 		cmd_line_design();
-
-		list = get_list1(&last_sym);
+		list = get_list1(&last_sym, &pipe_count);
 
 
 	}
 	waitpid(bg_pids, NULL, 0);
+	free_list(list, 0);
+	free(pids);
 //	char *word;
 /*	int pipe_count = 0;
 	char last_sym;
