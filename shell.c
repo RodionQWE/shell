@@ -32,6 +32,8 @@ char *get_word(char *last_sym) {
         t = getchar();
 	while (t == ' ')
 		t = getchar();
+	if (t == '\n')
+		return word;
 	while (t != ' ' && t != '\t' && t != '\n')
 	{
 		word = realloc(word, (n + 1) * sizeof(char));
@@ -57,7 +59,7 @@ void free_list(char **list, int pipe_count)
 				free(list[i]);
 				i++;
 			}
-			free(list[i]);
+		//	free(list[i]);
 			i++;
 		}
 	}
@@ -104,6 +106,7 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 {
 	int word_count = 0;
 	num_of_processes = pipe_count + 1;
+	int fd_inp, fd_out;
 	if (pipe_count > 0)
 	{
 		int fd[pipe_count][2];
@@ -124,7 +127,7 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 				}
 				if (i == 0 && (input_name != NULL))
 				{
-					int fd_inp = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
+					fd_inp = open(input_name, O_RDONLY, S_IRUSR|S_IWUSR);
 					dup2(fd_inp, 0);
 					close(fd_inp);
 				}
@@ -136,7 +139,7 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 				}
 				if (i == pipe_count && (output_name != NULL))
 				{
-					int fd_out = open(output_name, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+					fd_out = open(output_name, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
 					dup2(fd_out, 1);
 					close(fd_out);
 				}
@@ -168,6 +171,9 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 			close(fd[j][0]);
 			close(fd[j][1]);
 		}
+//		if (input_name != NULL)
+//			close(fd_inp);
+///		close(fd_out);
 //		close(fd[pipe_count - 1][0]);
 //		close(fd[pipe_count - 1][1]);
 		for (int j = 0; j <= pipe_count; j++)
@@ -292,42 +298,56 @@ int cd_command(char **list) {
 	return 0;
 }
 
+void get_trash()
+{
+	char end = ' ';
+	while (end != '\n')
+		get_word(&end);
+	return;
+}
 
-char **get_list1(char *last_symbol, int *pipe_count)
+
+char **get_list1(char *last_symbol, int *flag_end, char **list, int *pipe_count)
 {
 	char *out_name = NULL;
 	char *inp_name = NULL;
-	char **list = NULL;
 	char pipe_sym[] = "|";
 	char out_sym[] = ">";
 	char inp_sym[] = "<";
 	char bg_sym[] = "&";
 	char cd_word[] = "cd";
 	char and_word[] = "&&";
-	int and_count = 0;
-//	char *word = NULL;
+	*flag_end = 1;
 	char end;
-//	char end2;
-//	char *word;
-	int i = 0; //,new_pipe_num = *old_pipe_num;
+	int i = 0;
 	do
 	{
-		start:
 		list = realloc(list, (i + 1) * sizeof(char *));
-		start_start:
 		list[i] = get_word(&end);
+		if (list[0] == NULL)
+			continue;
 		if (!strcmp(list[i], and_word))
 		{
-			and_count = 1;
 			list[i] = NULL;
-			goto skip;
+			*flag_end = 1;
+			if ((exec_command(list, *pipe_count, out_name, inp_name) == 0) && end != '\n')
+			{
+				out_name = NULL;
+				inp_name = NULL;
+				*pipe_count = 0;
+				i = 0;
+				continue;
+			}
+			if (end != '\n')
+				get_trash();
+			return list;
 		}
 		if (!strcmp(list[i], cd_word))
 		{
 			list = realloc(list, (i + 2) * sizeof(char *));
 			if (end != '\n')
 			{
-				list[i + 1] = get_word(&end);
+	    			list[i + 1] = get_word(&end);
 				list = realloc(list, (i + 3) * sizeof(char *));
 				list[i + 2] = NULL;
 			}
@@ -338,10 +358,13 @@ char **get_list1(char *last_symbol, int *pipe_count)
 				if (!strcmp(get_word(&end), and_word))
 				{
 					i = 0;
-					goto start;
+					*flag_end = 2;
+					break;
 				}
 			}
-			goto trash;
+			if (end != '\n')
+				get_trash();
+			return list;
 		}
 		if (!strcmp(list[i], bg_sym))
 		{
@@ -356,49 +379,35 @@ char **get_list1(char *last_symbol, int *pipe_count)
 			(*pipe_count)++;
 			list[i] = NULL;
 			i++;
-			goto start;
+			continue;
 		}
 		if(!strcmp(list[i], out_sym))
 		{
 			out_name = get_word(&end);
 			if (end == '\n')
-				goto skip;
-			goto start_start;
+				break;
+			list[i] = NULL;
+			i++;
+			continue;
 		}
 		if(!strcmp(list[i], inp_sym))
 		{
 			inp_name = get_word(&end);
-		//	inp_name = NULL;
 			if (end == '\n')
-				goto skip;
-			else
-			{
-		//		putchar('N');
-				goto start_start;
-			}
+				break;
+			list[i] = NULL;
+			continue;
 		}
         	i++;
         }while ((end != '\n'));
-	list = realloc(list, (i + 1) * sizeof(char *));
-	skip:
-	list[i] = NULL;
-	if (and_count == 1)
+	if (*flag_end == 1)
 	{
-		if ((exec_command(list, *pipe_count, out_name, inp_name) == 0) && end != '\n')
-		{
-			out_name = NULL;
-			inp_name = NULL;
-			*pipe_count = 0;
-			i = 0;
-			and_count = 0;
-			goto start;
-		}
-		trash:
-		while (end != '\n')
-			get_word(&end);
-		return list;
+		list = realloc(list, (i + 1) * sizeof(char *));
+
+		*flag_end = 0;
+		list[i] = NULL;
+		exec_command(list, *pipe_count, out_name, inp_name);
 	}
-	exec_command(list, *pipe_count, out_name, inp_name);
 	return list;
 }
 
@@ -407,7 +416,6 @@ void cmd_line_design()
 	char *user = getenv("USER");
 	char *working_directory = getenv("PWD");
 	printf("%s" ":" "%s" "$ ", user, working_directory);
-//	fflush(stdout);
 }
 
 
@@ -418,10 +426,8 @@ void handler(int signo)
 	cmd_line_design();
 	for (i = 0; i < num_of_processes; i++)
 	{
-//		printf("process pid %u\n", pids[i]);
 		if (pids[i])
 		{
-//			printf("kill %u\n", pids[i]);
 			kill(pids[i], SIGINT);
         	}
 		waitpid(pids[i], NULL, 0);
@@ -434,42 +440,25 @@ int main()
 {
 	char **list = NULL;
 	char last_sym;
-	int pipe_count = 0;
+	int pipe_count = 0; //кол-во |
+	int flag_end = 0;
 	signal(SIGINT, handler);
 	cmd_line_design();
-	list = get_list1(&last_sym, &pipe_count);
-//	if (list == NULL)
-//		return list;
+	list = get_list1(&last_sym, &flag_end, list, &pipe_count);
 	while (!check_exit(list[0]))
 	{
-		free_list(list, pipe_count);
+	//	free_list(list, pipe_count);
 		pipe_count = 0;
 		cmd_line_design();
-		list = get_list1(&last_sym, &pipe_count);
+		flag_end = 0;
+		list = get_list1(&last_sym, &flag_end, list, &pipe_count);
 
 
 	}
+	free_list(list, pipe_count);
 	waitpid(bg_pids, NULL, 0);
-	free_list(list, 0);
+//	free_list(list, 0);
 	free(pids);
-//	char *word;
-/*	int pipe_count = 0;
-	char last_sym;
-	int word_count = 0;
-	list = get_list1(&last_sym, &pipe_count);
-	for (int i = 0; i < pipe_count + 1; i++)
-	{
-		print_list(list, &word_count);
-	}*/
-//	free_list(list);
-//	exec_command(list);
-//	list = get_list();
-//	exec_command(list);
-//	print_list(list);
-//	free_list(list);
-//	list = NULL;
-//	list = get_exec(list);
-//	print_list(list);
 	return 0;
 }
 
