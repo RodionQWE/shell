@@ -14,4 +14,4 @@
 - git clone
 ## Как запустить
 - make
--./shell
+- ./shell
