@@ -317,6 +317,7 @@ char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list,
 	char bg_sym[] = "&";
 	char cd_word[] = "cd";
 	char and_word[] = "&&";
+	char or_word[] = "||";
 	*flag_end = 1;
 	char end;
 	int i = 0;
@@ -326,6 +327,23 @@ char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list,
 		list[i] = get_word(&end);
 		if (list[0] == NULL)
 			continue;
+		if (!strcmp(list[i], or_word))
+		{
+			list[i] = NULL;
+			*flag_end = 1;
+			if ((exec_command(list, *pipe_count, out_name, inp_name) > 0) && end != '\n')
+			{
+				out_name = NULL;
+				inp_name = NULL;
+				*pipe_count = 0;
+				i = 0;
+				free_list(list, *pipe_count);
+				continue;
+			}
+			if (end != '\n')
+				get_trash();
+			return list;
+		}
 		if (!strcmp(list[i], and_word))
 		{
 			list[i] = NULL;
