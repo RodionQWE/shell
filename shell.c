@@ -10,8 +10,6 @@
 #include <signal.h>
 
 pid_t *pids = NULL;
-int num_bg = 0;
-pid_t bg_pids;
 int num_of_processes = 0;
 //int status = -3;
 
@@ -245,20 +243,20 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 	return wstatus;
 }
 
-void run_bg(char **list)
+void run_bg(char **list, pid_t *bg_pids, int *num_bg)
 {
 //	char *word;
 //	char end;
 //	word = get_word(&end);
-	num_bg++;
-	bg_pids = fork();
-	if (bg_pids == 0)
+	(*num_bg)++;
+	*bg_pids = fork();
+	if (*bg_pids == 0)
 	{
 		execvp(list[0], list);
 		perror(list[0]);
 		return;
 	}
-	printf("[ %d ]	%d\n", num_bg, bg_pids);
+	printf("[ %d ]	%d\n", *num_bg, *bg_pids);
 	return;
 }
 
@@ -308,7 +306,7 @@ void get_trash()
 }
 
 
-char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list)
+char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list, pid_t *bg_pids,  int *num_bg)
 {
 	char *out_name = NULL;
 	char *inp_name = NULL;
@@ -372,7 +370,7 @@ char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list)
 		if (!strcmp(list[i], bg_sym))
 		{
 			list[i] = NULL;
-			run_bg(list);
+			run_bg(list, bg_pids, num_bg);
 //			bg_flag = 1;
 //			goto skip;
 			return list;
@@ -446,16 +444,18 @@ int main()
 	char last_sym;
 	int pipe_count = 0; //кол-во |
 	int flag_end = 0;
+	int num_bg = 0;
+	pid_t bg_pids;
 	signal(SIGINT, handler);
 	cmd_line_design();
-	list = get_list1(&last_sym, &flag_end, &pipe_count, list);
+	list = get_list1(&last_sym, &flag_end, &pipe_count, list, &bg_pids, &num_bg);
 	while (!check_exit(list[0]))
 	{
 		free_list(list, pipe_count);
 		pipe_count = 0;
 		cmd_line_design();
 		flag_end = 0;
-		list = get_list1(&last_sym, &flag_end, &pipe_count, list);
+		list = get_list1(&last_sym, &flag_end, &pipe_count, list, &bg_pids, &num_bg);
 
 
 
