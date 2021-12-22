@@ -9,9 +9,9 @@
 #include <sys/stat.h>
 #include <signal.h>
 
+pid_t *pids = NULL;
 int num_bg = 0;
 pid_t bg_pids;
-pid_t *pids = NULL;
 int num_of_processes = 0;
 //int status = -3;
 
@@ -59,11 +59,10 @@ void free_list(char **list, int pipe_count)
 				free(list[i]);
 				i++;
 			}
-		//	free(list[i]);
+			free(list[i]);
 			i++;
 		}
 	}
-	free(list);
 }
 
 
@@ -227,6 +226,7 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 		//	exit(1);
 			return 1;
 		}
+	//	close(fd2);
 		wait(&wstatus);
 		return wstatus;
 	}
@@ -237,6 +237,7 @@ int exec_command(char **list, int pipe_count, char *output_name, char *input_nam
 		if (pids[0] == 0)
         	{
 			execvp(list[0], list);
+			exit(1);
 			return 0;
 	        }
 	}
@@ -307,10 +308,11 @@ void get_trash()
 }
 
 
-char **get_list1(char *last_symbol, int *flag_end, char **list, int *pipe_count)
+char **get_list1(char *last_symbol, int *flag_end, int *pipe_count, char **list)
 {
 	char *out_name = NULL;
 	char *inp_name = NULL;
+//	char **list = NULL;
 	char pipe_sym[] = "|";
 	char out_sym[] = ">";
 	char inp_sym[] = "<";
@@ -336,6 +338,7 @@ char **get_list1(char *last_symbol, int *flag_end, char **list, int *pipe_count)
 				inp_name = NULL;
 				*pipe_count = 0;
 				i = 0;
+				free_list(list, *pipe_count);
 				continue;
 			}
 			if (end != '\n')
@@ -384,18 +387,17 @@ char **get_list1(char *last_symbol, int *flag_end, char **list, int *pipe_count)
 		if(!strcmp(list[i], out_sym))
 		{
 			out_name = get_word(&end);
+			free(list[i]);
 			if (end == '\n')
 				break;
-			list[i] = NULL;
-			i++;
 			continue;
 		}
 		if(!strcmp(list[i], inp_sym))
 		{
 			inp_name = get_word(&end);
+			free(list[i]);
 			if (end == '\n')
 				break;
-			list[i] = NULL;
 			continue;
 		}
         	i++;
@@ -403,10 +405,13 @@ char **get_list1(char *last_symbol, int *flag_end, char **list, int *pipe_count)
 	if (*flag_end == 1)
 	{
 		list = realloc(list, (i + 1) * sizeof(char *));
-
 		*flag_end = 0;
 		list[i] = NULL;
 		exec_command(list, *pipe_count, out_name, inp_name);
+		if (out_name != NULL)
+			free(out_name);
+		if (inp_name != NULL)
+			free(inp_name);
 	}
 	return list;
 }
@@ -444,18 +449,20 @@ int main()
 	int flag_end = 0;
 	signal(SIGINT, handler);
 	cmd_line_design();
-	list = get_list1(&last_sym, &flag_end, list, &pipe_count);
+	list = get_list1(&last_sym, &flag_end, &pipe_count, list);
 	while (!check_exit(list[0]))
 	{
-	//	free_list(list, pipe_count);
+		free_list(list, pipe_count);
 		pipe_count = 0;
 		cmd_line_design();
 		flag_end = 0;
-		list = get_list1(&last_sym, &flag_end, list, &pipe_count);
+		list = get_list1(&last_sym, &flag_end, &pipe_count, list);
+
 
 
 	}
 	free_list(list, pipe_count);
+	free(list);
 	waitpid(bg_pids, NULL, 0);
 //	free_list(list, 0);
 	free(pids);
