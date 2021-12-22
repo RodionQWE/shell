@@ -436,7 +436,7 @@ void handler(int signo)
 			kill(pids[i], SIGINT);
         	}
 		waitpid(pids[i], NULL, 0);
-		pids[i] = 0;
+	//	pids[i] = 0;
 	}
 }
 
